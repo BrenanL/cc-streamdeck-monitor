@@ -2,39 +2,57 @@
 
 ## Project Overview
 
-A tool that displays Claude Code session/weekly usage statistics on a physical Elgato Stream Deck device. The goal is to surface the usage data shown by `claude usage` (session percentage, 5-hour block countdown, weekly usage, Sonnet-only usage) directly on the Stream Deck as a live readout button.
+Displays Claude Code session/weekly usage on an Elgato Stream Deck button. Polls
+`https://api.anthropic.com/api/oauth/usage` every 60 seconds. Implemented as a
+Windows Stream Deck plugin (Node.js) that shells out to a WSL2 Python script.
 
 ## Current Status
 
-**Research phase.** No code has been written yet. We are investigating:
-- What Claude Code usage metrics actually mean and how they are calculated
-- How to programmatically drive a Stream Deck on Linux (WSL2)
-- Existing open-source projects for Stream Deck integration on Linux
-- Whether the Stream Deck is accessible from this WSL2 environment
+**Implementation phase.** Research complete. See `research/` and `DESIGN.md`.
 
 ---
 
 ## Rules for This Project
 
 ### Model Usage
-- **Never use Opus for subagents.** Subagent model must be `sonnet` or `haiku`.
-- **Use Haiku for lightweight subagents** (file exploration, local searches, quick lookups).
-- **Use Sonnet for complex research subagents** (multi-source web research, synthesis tasks).
+- **Never use Opus for subagents.** Use `sonnet` or `haiku` only.
+- **Use Haiku** for lightweight subagents (file exploration, quick lookups).
+- **Use Sonnet** for research and synthesis subagents.
 
 ### Subagent Standards
-When spawning a subagent, always define:
-1. **Goal** — what question it must answer or what artifact it must produce
-2. **Context** — what files to read, what prior findings to be aware of
-3. **Deliverables** — the exact format/content of the output (e.g., a markdown summary, a list of findings with source URLs)
-4. **Rules** — cite all sources (URLs, file paths, command outputs); do not hallucinate; if uncertain, say so explicitly
-
-### Source Citation
-All research findings must include citations. For web research: full URL. For local findings: absolute file path or command that produced the output.
+Always define: Goal, Context (files to read, prior findings), Deliverables (exact
+format), Rules (cite all sources; never hallucinate).
 
 ### Scope Discipline
-- Do not build until research is complete and unknowns are resolved.
 - Do not add features beyond what is asked.
 - Keep subagent prompts tight — one question per subagent where practical.
+
+---
+
+## OAuth Token — Critical Rules
+
+**NEVER call the refresh endpoint (`POST https://platform.claude.com/v1/oauth/token`).**
+
+### Why
+Anthropic rotates both tokens on every refresh call. If you call refresh and fail
+to write the new tokens atomically back to `~/.claude/.credentials.json`, the old
+tokens are permanently invalidated. This forces the user to log out and back in to
+Claude Code. This happened during development (2026-02-24) and is confirmed behavior.
+
+### Safe pattern (always use this)
+1. Read `accessToken` from `~/.claude/.credentials.json` — never modify the file.
+2. Call the usage API with that token.
+3. On 401/403: show error state on button. **Do not retry with refresh.**
+4. Keep polling on the same interval. Claude Code refreshes the token automatically
+   when the user is active. The next successful poll recovers the button automatically.
+
+### Why this is fine
+- Token lifetime: ~7–8 hours.
+- Claude Code proactively refreshes 5 min before expiry whenever it runs.
+- If the user hasn't used Claude Code long enough for the token to expire, there's
+  nothing to monitor anyway — showing an auth error is correct behavior.
+- Auto-recovery: polling continues during error state, so the button heals itself
+  the moment Claude Code refreshes the token, with no user action needed.
 
 ---
 
@@ -42,18 +60,8 @@ All research findings must include citations. For web research: full URL. For lo
 
 | File | Purpose |
 |------|---------|
-| `CLAUDE.md` | This file — project rules and status |
-| `research/claude-usage-metrics.md` | What `claude usage` output means |
-| `research/stream-deck-linux.md` | Stream Deck Linux/WSL2 integration options |
-| `research/existing-projects.md` | Prior art: existing Stream Deck + status display projects |
-| `research/unknowns.md` | Outstanding unknowns blocking implementation |
-
----
-
-## Known Context
-
-- Machine: Linux WSL2 (WSL2 kernel 6.6.87.2-microsoft-standard-WSL2)
-- Stream Deck: physically connected to the host Windows machine
-- Claude CLI command for usage: `claude usage`
-- Usage data includes: session %, session block end time, weekly usage %, Sonnet-only weekly usage
-- Primary language preference: not yet determined (Python or Node.js most likely)
+| `CLAUDE.md` | This file |
+| `DESIGN.md` | Architecture and design decisions |
+| `get-usage.py` | WSL2 Python script — reads token, fetches usage, prints JSON |
+| `com.claude-code.usage-monitor.sdPlugin/` | Stream Deck plugin (Windows Node.js) |
+| `research/` | All research documents |

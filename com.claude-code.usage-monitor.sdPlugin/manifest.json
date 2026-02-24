@@ -1,0 +1,32 @@
+{
+  "Author": "Claude Code User",
+  "CodePath": "bin/plugin.js",
+  "Description": "Displays Claude Code session and weekly usage on a Stream Deck button. Polls every 60 seconds automatically.",
+  "Icon": "imgs/plugin/category",
+  "Name": "Claude Usage Monitor",
+  "UUID": "com.claude-code.usage-monitor",
+  "Version": "1.0.0",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.4"
+  },
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Category": "Developer Tools",
+  "CategoryIcon": "imgs/plugin/category",
+  "Actions": [
+    {
+      "Icon": "imgs/actions/display/key",
+      "Name": "Usage Display",
+      "States": [
+        {
+          "Image": "imgs/actions/display/key"
+        }
+      ],
+      "Tooltip": "Shows Claude Code 5h session %, weekly %, and Sonnet %. Updates every 60 seconds.",
+      "UUID": "com.claude-code.usage-monitor.display",
+      "DisableCaching": true
+    }
+  ]
+}
