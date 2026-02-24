@@ -1,6 +1,6 @@
 # Claude Usage Monitor — Stream Deck Plugin
 
-Displays Claude Code session and weekly usage directly on an Elgato Stream Deck button.
+A free, open source Stream Deck plugin that puts your Claude Code usage stats on a physical button. If you use Claude Code on a Max or Pro plan, this shows your 5-hour session percentage, 7-day weekly usage, and Sonnet-specific quota — with color-coded alerts and a pace indicator that tells you if you're burning through your weekly budget too fast. Six display styles available, all configurable from the Stream Deck property inspector. Runs on Windows with WSL2.
 
 ```
 ┌──────────────────┐
@@ -118,3 +118,9 @@ Re-run `bash install.sh` from WSL2, then run `streamdeck restart com.claude-code
 | ◆ % | Rolling 7-day Sonnet-specific usage (separate limit) |
 
 All percentages are server-side opaque cost-weighted values. 100% = rate limit reached.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
