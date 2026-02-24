@@ -1,32 +1,115 @@
 {
-  "Author": "Claude Code User",
-  "CodePath": "bin/plugin.js",
-  "Description": "Displays Claude Code session and weekly usage on a Stream Deck button. Polls every 60 seconds automatically.",
-  "Icon": "imgs/plugin/category",
-  "Name": "Claude Usage Monitor",
-  "UUID": "com.claude-code.usage-monitor",
-  "Version": "1.0.0",
-  "SDKVersion": 2,
-  "Software": {
-    "MinimumVersion": "6.4"
-  },
-  "Nodejs": {
-    "Version": "20"
-  },
-  "Category": "Developer Tools",
-  "CategoryIcon": "imgs/plugin/category",
-  "Actions": [
-    {
-      "Icon": "imgs/actions/display/key",
-      "Name": "Usage Display",
-      "States": [
-        {
-          "Image": "imgs/actions/display/key"
-        }
-      ],
-      "Tooltip": "Shows Claude Code 5h session %, weekly %, and Sonnet %. Updates every 60 seconds.",
-      "UUID": "com.claude-code.usage-monitor.display",
-      "DisableCaching": true
-    }
-  ]
+	"Name": "Claude Usage Monitor",
+	"Version": "1.1.0",
+	"Author": "Brenan",
+	"Actions": [
+		{
+			"Name": "Usage Display",
+			"UUID": "com.claude-code.usage-monitor.display",
+			"Icon": "imgs/actions/display/icon",
+			"Tooltip": "5h session %, 7d weekly %, and Sonnet %. 7d is pace-colored. Updates every 60s.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/display/key",
+					"TitleAlignment": "middle"
+				}
+			],
+			"PropertyInspectorPath": "ui/combo-settings.html"
+		},
+		{
+			"Name": "Stacked Bars",
+			"UUID": "com.claude-code.usage-monitor.stacked",
+			"Icon": "imgs/actions/stacked/icon",
+			"Tooltip": "Three horizontal bars: 5h session, 7d weekly (pace-colored), and 7d Sonnet.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/stacked/key",
+					"TitleAlignment": "middle"
+				}
+			],
+			"PropertyInspectorPath": "ui/combo-settings.html"
+		},
+		{
+			"Name": "Toggle View",
+			"UUID": "com.claude-code.usage-monitor.toggle",
+			"Icon": "imgs/actions/toggle/icon",
+			"Tooltip": "Cycles through 5h, 7d, and Sonnet views on press. Each view shows full detail.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/toggle/key",
+					"TitleAlignment": "middle"
+				}
+			],
+			"PropertyInspectorPath": "ui/combo-settings.html"
+		},
+		{
+			"Name": "5h Session",
+			"UUID": "com.claude-code.usage-monitor.session",
+			"Icon": "imgs/actions/session/icon",
+			"Tooltip": "Dedicated button for the 5-hour session usage only.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/session/key",
+					"TitleAlignment": "middle"
+				}
+			],
+			"PropertyInspectorPath": "ui/session-settings.html"
+		},
+		{
+			"Name": "7d Weekly",
+			"UUID": "com.claude-code.usage-monitor.weekly",
+			"Icon": "imgs/actions/weekly/icon",
+			"Tooltip": "Dedicated button for 7-day weekly usage with pace indicator and delta.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/weekly/key",
+					"TitleAlignment": "middle"
+				}
+			],
+			"PropertyInspectorPath": "ui/weekly-settings.html"
+		},
+		{
+			"Name": "7d Sonnet",
+			"UUID": "com.claude-code.usage-monitor.sonnet",
+			"Icon": "imgs/actions/sonnet/icon",
+			"Tooltip": "Dedicated button for 7-day Sonnet-specific usage.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/sonnet/key",
+					"TitleAlignment": "middle"
+				}
+			],
+			"PropertyInspectorPath": "ui/sonnet-settings.html"
+		}
+	],
+	"Category": "Claude Code",
+	"CategoryIcon": "imgs/plugin/category",
+	"CodePath": "bin/plugin.js",
+	"Description": "Displays Claude Code session and weekly usage on Stream Deck buttons. Six display styles with configurable thresholds.",
+	"Icon": "imgs/plugin/category",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "6.9"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"UUID": "com.claude-code.usage-monitor"
 }

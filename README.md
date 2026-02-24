@@ -18,7 +18,9 @@ Updates every 60 seconds. Press the button to refresh immediately.
 
 ## Prerequisites
 
-- Elgato Stream Deck software 6.4+ installed on Windows
+- Elgato Stream Deck software 6.9+ installed on Windows
+- **Node.js installed on Windows** (required for the Elgato CLI — download from nodejs.org)
+- Elgato CLI installed on Windows: `npm install -g @elgato/cli@latest`
 - WSL2 running (Ubuntu or any distro with Python 3)
 - Claude Code logged in (your OAuth token must be valid)
 
@@ -26,7 +28,7 @@ Updates every 60 seconds. Press the button to refresh immediately.
 
 ## Install
 
-From a WSL2 terminal in this directory:
+**Step 1 — from a WSL2 terminal** in this directory:
 
 ```bash
 bash install.sh
@@ -36,18 +38,26 @@ The script:
 1. Copies `get-usage.py` to `~/.local/share/claude-usage/`
 2. Copies the plugin to `%APPDATA%\Elgato\StreamDeck\Plugins\`
 
+**Step 2 — from a Windows PowerShell terminal:**
+
+```powershell
+streamdeck restart com.claude-code.usage-monitor
+```
+
+This reloads the plugin. You only need to do this after install or update.
+
 ---
 
 ## Stream Deck Setup (you do this once)
 
-1. **Enable developer mode** in Stream Deck software:
-   Settings → Advanced → Enable Plugin Development Mode
+1. **Enable developer mode** from a Windows PowerShell terminal:
+   ```powershell
+   streamdeck dev
+   ```
 
-2. **Restart** the Stream Deck software (quit and reopen)
-
-3. **Drag the action** onto a button:
+2. **Drag the action** onto a button:
    In the action library (right panel), find:
-   `Developer Tools` → `Claude Usage Monitor` → `Usage Display`
+   `Claude Code` → `Claude Usage Monitor` → `Usage Display`
    Drag it onto any button.
 
 That's it. The button will show a loading state for up to 60 seconds, then display live usage data.
@@ -85,16 +95,16 @@ The plugin isn't receiving data. Check the Stream Deck software log at:
 Look for `com.claude-code.usage-monitor.log`.
 
 **Plugin not appearing in action library**
-1. Confirm developer mode is enabled (Settings → Advanced)
+1. Confirm developer mode is enabled — run `streamdeck dev` in Windows PowerShell
 2. Confirm the plugin folder exists at:
    `%APPDATA%\Elgato\StreamDeck\Plugins\com.claude-code.usage-monitor.sdPlugin\`
-3. Restart Stream Deck software
+3. Run `streamdeck restart com.claude-code.usage-monitor` in Windows PowerShell
 
 **After updating get-usage.py**
-Re-run `bash install.sh`. No need to restart Stream Deck.
+Re-run `bash install.sh` from WSL2. No need to restart the plugin.
 
 **After updating the plugin itself**
-Re-run `bash install.sh`, then restart Stream Deck software.
+Re-run `bash install.sh` from WSL2, then run `streamdeck restart com.claude-code.usage-monitor` in Windows PowerShell.
 
 ---
 

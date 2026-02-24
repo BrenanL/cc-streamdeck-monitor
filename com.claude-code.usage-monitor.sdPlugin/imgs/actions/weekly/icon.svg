@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <rect width="72" height="72" fill="#0d1117"/>
+  <text x="36" y="22" text-anchor="middle"
+        fill="#555" font-size="9" font-family="sans-serif">7d weekly</text>
+  <text x="36" y="42" text-anchor="middle" dominant-baseline="middle"
+        fill="#ffaa00" font-size="22" font-weight="bold" font-family="monospace">42%</text>
+  <text x="36" y="54" text-anchor="middle"
+        fill="#33cc77" font-size="8" font-family="monospace">+3% pace</text>
+  <text x="36" y="65" text-anchor="middle"
+        fill="#444" font-size="8" font-family="monospace">↻ 1d12h</text>
+</svg>

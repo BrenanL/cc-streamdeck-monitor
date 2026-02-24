@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1e1e1e; color: #c8c8c8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px; padding: 8px;
+    }
+    .section { margin-bottom: 10px; }
+    .section-title {
+      color: #888; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 6px; padding-bottom: 3px;
+      border-bottom: 1px solid #333;
+    }
+    .row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    label { color: #aaa; flex: 1; }
+    input[type="number"] {
+      width: 52px; background: #2d2d2d; border: 1px solid #444;
+      color: #c8c8c8; padding: 3px 5px; border-radius: 3px;
+      font-size: 12px; text-align: right;
+    }
+    input[type="number"]:focus { outline: none; border-color: #666; }
+    .hint { color: #555; font-size: 10px; margin-bottom: 8px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <div class="section-title">5h Session Thresholds</div>
+    <div class="row"><label>Yellow at %</label><input type="number" id="sessionYellow" min="0" max="100"/></div>
+    <div class="row"><label>Red at %</label><input type="number" id="sessionRed" min="0" max="100"/></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">7d Pace (working days)</div>
+    <p class="hint">How fast you expect to use your weekly budget. Default 20%/day = 5 working days × 20% = 100%.</p>
+    <div class="row"><label>% per working day</label><input type="number" id="pacePerDay" min="1" max="100"/></div>
+    <div class="row"><label>Yellow when % over</label><input type="number" id="paceYellow" min="0" max="100"/></div>
+    <div class="row"><label>Red when % over</label><input type="number" id="paceRed" min="0" max="100"/></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">7d Sonnet Thresholds</div>
+    <div class="row"><label>Yellow at %</label><input type="number" id="sonnetYellow" min="0" max="100"/></div>
+    <div class="row"><label>Red at %</label><input type="number" id="sonnetRed" min="0" max="100"/></div>
+  </div>
+
+  <script>
+    var websocket = null;
+    var pUUID = null;
+    var settings = {};
+
+    var DEFAULTS = {
+      sessionYellow: 60, sessionRed: 90,
+      pacePerDay: 20, paceYellow: 5, paceRed: 15,
+      sonnetYellow: 60, sonnetRed: 90
+    };
+
+    var FIELDS = Object.keys(DEFAULTS);
+
+    function loadToForm() {
+      FIELDS.forEach(function(k) {
+        var el = document.getElementById(k);
+        if (el) el.value = (settings[k] !== undefined) ? settings[k] : DEFAULTS[k];
+      });
+    }
+
+    function readFromForm() {
+      FIELDS.forEach(function(k) {
+        var el = document.getElementById(k);
+        if (el) settings[k] = parseInt(el.value, 10) || DEFAULTS[k];
+      });
+    }
+
+    function save() {
+      readFromForm();
+      if (websocket && pUUID) {
+        websocket.send(JSON.stringify({ event: 'setSettings', context: pUUID, payload: settings }));
+      }
+    }
+
+    FIELDS.forEach(function(k) {
+      var el = document.getElementById(k);
+      if (el) el.addEventListener('change', save);
+    });
+
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pUUID = inUUID;
+      try {
+        var ai = JSON.parse(inActionInfo);
+        settings = (ai.payload && ai.payload.settings) ? ai.payload.settings : {};
+      } catch(e) { settings = {}; }
+      loadToForm();
+
+      websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+      websocket.onopen = function() {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+      };
+      websocket.onmessage = function(evt) {
+        try {
+          var msg = JSON.parse(evt.data);
+          if (msg.event === 'didReceiveSettings') {
+            settings = (msg.payload && msg.payload.settings) ? msg.payload.settings : {};
+            loadToForm();
+          }
+        } catch(e) {}
+      };
+    }
+  </script>
+</body>
+</html>

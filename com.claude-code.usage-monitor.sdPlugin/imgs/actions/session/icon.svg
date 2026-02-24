@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <rect width="72" height="72" fill="#0d1117"/>
+  <text x="36" y="22" text-anchor="middle"
+        fill="#555" font-size="9" font-family="sans-serif">5h session</text>
+  <text x="36" y="46" text-anchor="middle" dominant-baseline="middle"
+        fill="#33cc77" font-size="22" font-weight="bold" font-family="monospace">75%</text>
+  <text x="36" y="62" text-anchor="middle"
+        fill="#444" font-size="8" font-family="monospace">↺ 2h30m</text>
+</svg>

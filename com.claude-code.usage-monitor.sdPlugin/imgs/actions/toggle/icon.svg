@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <rect width="72" height="72" fill="#0d1117"/>
+  <!-- Page dots -->
+  <circle cx="28" cy="16" r="4" fill="#cccccc"/>
+  <circle cx="36" cy="16" r="4" fill="#333"/>
+  <circle cx="44" cy="16" r="4" fill="#333"/>
+  <!-- Big percentage placeholder -->
+  <text x="36" y="44" text-anchor="middle" dominant-baseline="middle"
+        fill="#33cc77" font-size="22" font-weight="bold" font-family="monospace">5h</text>
+  <text x="36" y="62" text-anchor="middle"
+        fill="#444" font-size="8" font-family="sans-serif">toggle</text>
+</svg>
