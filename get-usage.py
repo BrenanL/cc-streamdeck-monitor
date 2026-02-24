@@ -17,6 +17,8 @@ Exit codes:
 
 import json
 import os
+import platform
+import subprocess
 import sys
 import ssl
 import urllib.request
@@ -29,7 +31,34 @@ SSL_CTX = ssl.create_default_context()
 
 
 def read_token():
-    """Read access token from credentials file. Never refreshes."""
+    """Read access token from credentials, Keychain (macOS), or env var. Never refreshes."""
+    # Environment variable takes priority on all platforms
+    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        return os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
+
+    # macOS: read from Keychain
+    if platform.system() == "Darwin":
+        try:
+            result = subprocess.run(
+                ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                raise RuntimeError("keychain-read-failed")
+            creds = json.loads(result.stdout.strip())
+            token = creds["claudeAiOauth"]["accessToken"]
+            if not token:
+                raise ValueError("accessToken is empty in Keychain")
+            return token
+        except json.JSONDecodeError:
+            raise RuntimeError("keychain-json-invalid")
+        except (KeyError, ValueError) as e:
+            raise RuntimeError(f"keychain-bad-format: {e}")
+
+    # Linux / WSL2: read from ~/.claude/.credentials.json
     try:
         with open(CREDENTIALS_FILE) as f:
             creds = json.load(f)
