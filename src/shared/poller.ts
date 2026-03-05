@@ -8,12 +8,16 @@
  */
 import { execFile } from "child_process";
 
-const POLL_MS = 60_000;
+// How often (ms) the plugin invokes the Python script to check for activity.
+// The script itself decides whether to make an API call or return cached data.
+// Lower = faster detection of Claude Code activity, but more frequent process spawns.
+const POLL_MS = 15_000;
 const WSL_TIMEOUT_MS = 20_000;
 const NATIVE_TIMEOUT_MS = 10_000;
 
 // WSL2 (Windows): $HOME is expanded by bash inside WSL2
 const WSL_SCRIPT_CMD = 'python3 "$HOME/.local/share/claude-usage/get-usage.py" --json';
+const WSL_SCRIPT_CMD_FORCE = 'python3 "$HOME/.local/share/claude-usage/get-usage.py" --json --force';
 
 // macOS: call python3 with the script path directly
 const NATIVE_SCRIPT_PATH = `${process.env.HOME ?? "~"}/.local/share/claude-usage/get-usage.py`;
@@ -84,18 +88,21 @@ function handleResult(err: (Error & { killed?: boolean }) | null, stdout: string
 	for (const cb of listeners) cb(data);
 }
 
-function fetchAndNotify(): void {
+function fetchAndNotify(force = false): void {
 	if (IS_MAC) {
+		const args = [NATIVE_SCRIPT_PATH, "--json"];
+		if (force) args.push("--force");
 		execFile(
 			"python3",
-			[NATIVE_SCRIPT_PATH, "--json"],
+			args,
 			{ timeout: NATIVE_TIMEOUT_MS },
 			(err, stdout) => handleResult(err, stdout, "python-error"),
 		);
 	} else {
+		const cmd = force ? WSL_SCRIPT_CMD_FORCE : WSL_SCRIPT_CMD;
 		execFile(
 			"wsl.exe",
-			["-e", "bash", "-c", WSL_SCRIPT_CMD],
+			["-e", "bash", "-c", cmd],
 			{ timeout: WSL_TIMEOUT_MS },
 			(err, stdout) => handleResult(err, stdout, "wsl-error"),
 		);
@@ -124,5 +131,5 @@ export function removeListener(cb: UpdateCallback): void {
 }
 
 export function fetchNow(): void {
-	fetchAndNotify();
+	fetchAndNotify(true);
 }
