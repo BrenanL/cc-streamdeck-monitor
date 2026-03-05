@@ -6,6 +6,12 @@ Reads the OAuth access token from ~/.claude/.credentials.json (read-only —
 never calls the refresh endpoint, see CLAUDE.md for why) and fetches usage
 data from the Anthropic API.
 
+Two fetch methods are available (controlled by FETCH_METHOD below):
+  "headers"  — POST a minimal message to /v1/messages and parse rate-limit
+               headers. Costs negligible subscription usage. (default)
+  "endpoint" — GET /api/oauth/usage directly. Free but undocumented and may
+               be rate-limited or deprecated.
+
 Usage:
   python3 get-usage.py          # human-readable output
   python3 get-usage.py --json   # JSON output for plugin
@@ -25,8 +31,15 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
+# ── Configuration ─────────────────────────────────────────────────────────────
+# Switch between "headers" (messages API + parse headers) and "endpoint"
+# (direct /api/oauth/usage GET). Change this to switch methods.
+FETCH_METHOD = "headers"  # "headers" or "endpoint"
+HEADERS_MODEL = "claude-3-haiku-20240307"  # cheapest model for minimal budget impact
+
 CREDENTIALS_FILE = os.path.expanduser("~/.claude/.credentials.json")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 SSL_CTX = ssl.create_default_context()
 
 
@@ -72,7 +85,8 @@ def read_token():
         raise RuntimeError(f"bad-credentials: {e}")
 
 
-def fetch_usage(token):
+def fetch_usage_endpoint(token):
+    """Original method: GET /api/oauth/usage. Free but undocumented."""
     req = urllib.request.Request(
         USAGE_URL,
         headers={
@@ -88,7 +102,74 @@ def fetch_usage(token):
             raise RuntimeError("auth-error")
         raise RuntimeError(f"http-{e.code}")
     except urllib.error.URLError as e:
-        raise RuntimeError(f"network-error")
+        raise RuntimeError("network-error")
+
+
+def fetch_usage_headers(token):
+    """New method: minimal POST to /v1/messages, parse rate-limit headers.
+
+    Uses subscription quota (negligible with a 1-token haiku call).
+    Returns data in the same shape as the old endpoint for compatibility.
+    """
+    body = json.dumps({
+        "model": HEADERS_MODEL,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "hi"}],
+    }).encode()
+    req = urllib.request.Request(
+        MESSAGES_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "anthropic-beta": "oauth-2025-04-20",
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+            hdrs = resp.headers
+            return _parse_ratelimit_headers(hdrs)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise RuntimeError("auth-error")
+        raise RuntimeError(f"http-{e.code}")
+    except urllib.error.URLError as e:
+        raise RuntimeError("network-error")
+
+
+def _parse_ratelimit_headers(hdrs):
+    """Convert anthropic-ratelimit-unified-* headers to the same JSON shape
+    as the old /api/oauth/usage endpoint."""
+    def _bucket(prefix):
+        util = hdrs.get(f"anthropic-ratelimit-unified-{prefix}-utilization")
+        reset = hdrs.get(f"anthropic-ratelimit-unified-{prefix}-reset")
+        if util is None:
+            return None
+        return {
+            "utilization": float(util) * 100,  # headers use 0–1, old endpoint used 0–100
+            "resets_at": datetime.fromtimestamp(int(reset), tz=timezone.utc).isoformat() if reset else None,
+        }
+
+    data = {
+        "five_hour": _bucket("5h"),
+        "seven_day": _bucket("7d"),
+        "seven_day_sonnet": _bucket("7d_sonnet"),  # may be None if model doesn't report it
+    }
+
+    overage_status = hdrs.get("anthropic-ratelimit-unified-overage-status")
+    data["extra_usage"] = {
+        "is_enabled": overage_status == "allowed",
+    }
+
+    return data
+
+
+def fetch_usage(token):
+    """Dispatch to the configured fetch method."""
+    if FETCH_METHOD == "headers":
+        return fetch_usage_headers(token)
+    return fetch_usage_endpoint(token)
 
 
 def fmt_delta(iso_str):

@@ -46,6 +46,11 @@ export interface UsageData {
 
 export type UpdateCallback = (data: UsageData) => void;
 
+/** Returns true if sonnet-specific data is present (not null/undefined). */
+export function hasSonnetData(data: UsageData): boolean {
+	return data.seven_day_sonnet != null;
+}
+
 // ── Module-level state ────────────────────────────────────────────────────────
 
 const listeners = new Set<UpdateCallback>();
@@ -54,15 +59,26 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function handleResult(err: (Error & { killed?: boolean }) | null, stdout: string, errorLabel: string): void {
 	let data: UsageData;
-	if (err) {
+	// Always try to parse stdout first — the script outputs valid JSON even on
+	// non-zero exit (e.g. auth-error, http-429). Only fall back to the generic
+	// errorLabel when stdout is missing or unparseable.
+	const trimmed = (stdout || "").trim();
+	if (trimmed) {
+		try {
+			data = JSON.parse(trimmed) as UsageData;
+		} catch {
+			if (err) {
+				const msg = err.killed ? "timed out" : (err.message || "unknown").slice(0, 60);
+				data = { error: errorLabel, message: msg };
+			} else {
+				data = { error: "parse-error", message: "bad output from script" };
+			}
+		}
+	} else if (err) {
 		const msg = err.killed ? "timed out" : (err.message || "unknown").slice(0, 60);
 		data = { error: errorLabel, message: msg };
 	} else {
-		try {
-			data = JSON.parse((stdout || "").trim()) as UsageData;
-		} catch {
-			data = { error: "parse-error", message: "bad output from script" };
-		}
+		data = { error: "parse-error", message: "no output from script" };
 	}
 	latestData = data;
 	for (const cb of listeners) cb(data);

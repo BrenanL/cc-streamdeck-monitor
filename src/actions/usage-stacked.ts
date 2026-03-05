@@ -10,6 +10,7 @@ import { addListener, fetchNow, removeListener } from "../shared/poller.js";
 import { calcWeeklyPace, paceColor, thresholdColor } from "../shared/pace.js";
 import { encode, extraBadge, meterRow, svg, svgError, svgLoading } from "../shared/svg.js";
 import type { Bucket, UsageData } from "../shared/poller.js";
+import { hasSonnetData } from "../shared/poller.js";
 
 interface Settings {
 	sessionYellow?: number;
@@ -34,15 +35,27 @@ function svgStacked(data: UsageData, s: Settings): string {
 	const sessionColor = thresholdColor(sessionPct, s.sessionYellow ?? 60, s.sessionRed ?? 90);
 	const pace = calcWeeklyPace(sd, s.pacePerDay ?? 20);
 	const weeklyColor  = paceColor(pace.delta, s.paceYellow ?? 5, s.paceRed ?? 15);
-	const sonnetColor  = thresholdColor(sonnetPct, s.sonnetYellow ?? 60, s.sonnetRed ?? 90);
+
+	const showSonnet = hasSonnetData(data);
+
+	if (showSonnet) {
+		const sonnetColor = thresholdColor(sonnetPct, s.sonnetYellow ?? 60, s.sonnetRed ?? 90);
+		return svg(
+			extraBadge(data.extra_usage) +
+			meterRow(14, "5h", sessionPct, sessionColor) +
+			meterRow(30, "7d", weeklyPct, weeklyColor) +
+			meterRow(46, " S", sonnetPct, sonnetColor) +
+			`<line x1="8" y1="54" x2="64" y2="54" stroke="#1e1e1e" stroke-width="1"/>` +
+			`<text x="36" y="64" class="dim">&#x21BA; ${resetIn}</text>`,
+		);
+	}
 
 	return svg(
 		extraBadge(data.extra_usage) +
-		meterRow(14, "5h", sessionPct, sessionColor) +
-		meterRow(30, "7d", weeklyPct, weeklyColor) +
-		meterRow(46, " S", sonnetPct, sonnetColor) +
-		`<line x1="8" y1="54" x2="64" y2="54" stroke="#1e1e1e" stroke-width="1"/>` +
-		`<text x="36" y="64" class="dim">&#x21BA; ${resetIn}</text>`,
+		meterRow(22, "5h", sessionPct, sessionColor) +
+		meterRow(42, "7d", weeklyPct, weeklyColor) +
+		`<line x1="8" y1="52" x2="64" y2="52" stroke="#1e1e1e" stroke-width="1"/>` +
+		`<text x="36" y="63" class="dim">&#x21BA; ${resetIn}</text>`,
 	);
 }
 
