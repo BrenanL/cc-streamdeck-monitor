@@ -9,6 +9,7 @@ import { addListener, fetchNow, removeListener } from "../shared/poller.js";
 import { thresholdColor } from "../shared/pace.js";
 import { encode, esc, extraBadge, svg, svgError, svgLoading } from "../shared/svg.js";
 import type { Bucket, UsageData } from "../shared/poller.js";
+import { hasSonnetData } from "../shared/poller.js";
 
 interface Settings {
 	sonnetYellow?: number;
@@ -39,9 +40,15 @@ export class UsageSonnet extends SingletonAction {
 	override onWillAppear(ev: WillAppearEvent): void {
 		this._settings = (ev.payload.settings ?? {}) as Settings;
 		this._update = (data: UsageData) => {
-			void ev.action.setImage(
-				encode(data.error ? svgError(data) : svgSonnet(data, this._settings)),
-			);
+			const img = data.error
+				? svgError(data)
+				: hasSonnetData(data)
+					? svgSonnet(data, this._settings)
+					: svg(
+						`<text x="36" y="30" class="lbl">7d Sonnet</text>` +
+						`<text x="36" y="48" class="dim">no data</text>`,
+					);
+			void ev.action.setImage(encode(img));
 		};
 		void ev.action.setImage(encode(svgLoading()));
 		addListener(this._update);

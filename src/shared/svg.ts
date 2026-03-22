@@ -55,10 +55,12 @@ export function svgLoading(): string {
 export function svgError(data: UsageData): string {
 	const code = data.error || "error";
 	const isAuth = code === "auth-error";
+	const isRate = code === "http-429";
+	const hint = isAuth ? "open Claude Code" : isRate ? "rate limited" : "retrying\u2026";
 	return svg(
 		`<text x="36" y="26" text-anchor="middle" ` +
 		`fill="#ff4444" font-size="10" font-family="sans-serif">${esc(code)}</text>` +
-		`<text x="36" y="44" class="dim">${isAuth ? "open Claude Code" : "retrying\u2026"}</text>` +
+		`<text x="36" y="44" class="dim">${hint}</text>` +
 		`<text x="36" y="58" class="dim">press to retry</text>`,
 	);
 }
@@ -88,9 +90,9 @@ export function meterRow(y: number, label: string, pct: number, color: string): 
 /**
  * Three small dots: the active one is white, inactive are dimmed.
  */
-export function pageDots(active: number): string {
-	const dots = [0, 1, 2].map((i) => {
-		const cx = 27 + i * 9;
+export function pageDots(active: number, total = 3): string {
+	const dots = Array.from({ length: total }, (_, i) => {
+		const cx = 36 - ((total - 1) * 9) / 2 + i * 9;
 		const fill = i === active ? "#cccccc" : "#333333";
 		return `<circle cx="${cx}" cy="7" r="2.5" fill="${fill}"/>`;
 	});

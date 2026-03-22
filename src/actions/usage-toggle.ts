@@ -10,6 +10,7 @@ import { addListener, fetchNow, removeListener } from "../shared/poller.js";
 import { calcWeeklyPace, paceColor, thresholdColor } from "../shared/pace.js";
 import { encode, esc, extraBadge, pageDots, svg, svgError, svgLoading } from "../shared/svg.js";
 import type { Bucket, UsageData } from "../shared/poller.js";
+import { hasSonnetData } from "../shared/poller.js";
 
 interface Settings {
 	sessionYellow?: number;
@@ -23,7 +24,7 @@ interface Settings {
 
 // ── Per-view SVG builders ─────────────────────────────────────────────────────
 
-function svgToggle5h(data: UsageData, s: Settings): string {
+function svgToggle5h(data: UsageData, s: Settings, pages: number): string {
 	const fh = (data.five_hour ?? {}) as Partial<Bucket>;
 	const pct = Math.round(fh.utilization ?? 0);
 	const resetIn = esc(fh.resets_in || "?");
@@ -31,7 +32,7 @@ function svgToggle5h(data: UsageData, s: Settings): string {
 
 	return svg(
 		extraBadge(data.extra_usage) +
-		pageDots(0) +
+		pageDots(0, pages) +
 		`<text x="56" y="12" text-anchor="end" fill="#444" font-size="8" ` +
 		`font-family="sans-serif">5h</text>` +
 		`<text x="36" y="39" text-anchor="middle" dominant-baseline="middle" ` +
@@ -41,7 +42,7 @@ function svgToggle5h(data: UsageData, s: Settings): string {
 	);
 }
 
-function svgToggle7d(data: UsageData, s: Settings): string {
+function svgToggle7d(data: UsageData, s: Settings, pages: number): string {
 	const sd = (data.seven_day ?? {}) as Partial<Bucket>;
 	const pct = Math.round(sd.utilization ?? 0);
 	const resetIn = esc(sd.resets_in || "?");
@@ -55,7 +56,7 @@ function svgToggle7d(data: UsageData, s: Settings): string {
 
 	return svg(
 		extraBadge(data.extra_usage) +
-		pageDots(1) +
+		pageDots(1, pages) +
 		`<text x="56" y="12" text-anchor="end" fill="#444" font-size="8" ` +
 		`font-family="sans-serif">7d</text>` +
 		`<text x="36" y="36" text-anchor="middle" dominant-baseline="middle" ` +
@@ -66,7 +67,7 @@ function svgToggle7d(data: UsageData, s: Settings): string {
 	);
 }
 
-function svgToggleSonnet(data: UsageData, s: Settings): string {
+function svgToggleSonnet(data: UsageData, s: Settings, pages: number): string {
 	const ss = (data.seven_day_sonnet ?? {}) as Partial<Bucket>;
 	const pct = Math.round(ss.utilization ?? 0);
 	const resetIn = esc(ss.resets_in || "?");
@@ -74,7 +75,7 @@ function svgToggleSonnet(data: UsageData, s: Settings): string {
 
 	return svg(
 		extraBadge(data.extra_usage) +
-		pageDots(2) +
+		pageDots(2, pages) +
 		`<text x="56" y="12" text-anchor="end" fill="#444" font-size="8" ` +
 		`font-family="sans-serif">S</text>` +
 		`<text x="36" y="39" text-anchor="middle" dominant-baseline="middle" ` +
@@ -90,16 +91,21 @@ function svgToggleSonnet(data: UsageData, s: Settings): string {
 export class UsageToggle extends SingletonAction {
 	private _update!: (data: UsageData) => void;
 	private _settings: Settings = {};
-	private _view = 0; // 0=5h, 1=7d, 2=Sonnet
+	private _view = 0; // 0=5h, 1=7d, 2=Sonnet (if available)
 	private _lastData: UsageData | null = null;
+
+	private pageCount(): number {
+		return this._lastData && hasSonnetData(this._lastData) ? 3 : 2;
+	}
 
 	private renderCurrent(): string {
 		const data = this._lastData;
 		if (!data) return svgLoading();
 		if (data.error) return svgError(data);
-		if (this._view === 1) return svgToggle7d(data, this._settings);
-		if (this._view === 2) return svgToggleSonnet(data, this._settings);
-		return svgToggle5h(data, this._settings);
+		const pages = this.pageCount();
+		if (this._view === 1) return svgToggle7d(data, this._settings, pages);
+		if (this._view === 2 && hasSonnetData(data)) return svgToggleSonnet(data, this._settings, pages);
+		return svgToggle5h(data, this._settings, pages);
 	}
 
 	override onWillAppear(ev: WillAppearEvent): void {
@@ -117,7 +123,7 @@ export class UsageToggle extends SingletonAction {
 	}
 
 	override onKeyDown(ev: KeyDownEvent): void {
-		this._view = (this._view + 1) % 3;
+		this._view = (this._view + 1) % this.pageCount();
 		void ev.action.setImage(encode(this.renderCurrent()));
 		// Also refresh data
 		fetchNow();

@@ -11,6 +11,7 @@ import { addListener, fetchNow, removeListener } from "../shared/poller.js";
 import { calcWeeklyPace, paceColor, thresholdColor } from "../shared/pace.js";
 import { encode, esc, extraBadge, svg, svgError, svgLoading } from "../shared/svg.js";
 import type { Bucket, UsageData } from "../shared/poller.js";
+import { hasSonnetData } from "../shared/poller.js";
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -45,11 +46,18 @@ function svgDisplay(data: UsageData, s: Settings): string {
 	const pace       = calcWeeklyPace(sd, s.pacePerDay ?? 20);
 	const weeklyColor = paceColor(pace.delta, s.paceYellow ?? 5, s.paceRed ?? 15);
 
-	const sonnetColor = thresholdColor(
-		sonnetPct,
-		s.sonnetYellow ?? 60,
-		s.sonnetRed    ?? 90,
-	);
+	const showSonnet = hasSonnetData(data);
+	const sonnetColor = showSonnet
+		? thresholdColor(sonnetPct, s.sonnetYellow ?? 60, s.sonnetRed ?? 90)
+		: "";
+
+	const footer = showSonnet
+		? `<text x="10" y="66" text-anchor="start" fill="${weeklyColor}" ` +
+		  `font-size="9" font-family="monospace,sans-serif">7d ${weeklyPct}%</text>` +
+		  `<text x="62" y="66" text-anchor="end" fill="${sonnetColor}" ` +
+		  `font-size="9" font-family="monospace,sans-serif">&#x25C6;${sonnetPct}%</text>`
+		: `<text x="36" y="66" text-anchor="middle" fill="${weeklyColor}" ` +
+		  `font-size="9" font-family="monospace,sans-serif">7d ${weeklyPct}%</text>`;
 
 	return svg(
 		extraBadge(data.extra_usage) +
@@ -59,10 +67,7 @@ function svgDisplay(data: UsageData, s: Settings): string {
 		`font-family="monospace,sans-serif">${sessionPct}%</text>` +
 		`<text x="36" y="50" class="dim">&#x21BA; ${resetIn}</text>` +
 		`<line x1="12" y1="55" x2="60" y2="55" stroke="#2a2a2a" stroke-width="1"/>` +
-		`<text x="10" y="66" text-anchor="start" fill="${weeklyColor}" ` +
-		`font-size="9" font-family="monospace,sans-serif">7d ${weeklyPct}%</text>` +
-		`<text x="62" y="66" text-anchor="end" fill="${sonnetColor}" ` +
-		`font-size="9" font-family="monospace,sans-serif">&#x25C6;${sonnetPct}%</text>`,
+		footer,
 	);
 }
 

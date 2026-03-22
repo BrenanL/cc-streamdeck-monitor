@@ -8,12 +8,17 @@
  */
 import { execFile } from "child_process";
 
-const POLL_MS = 60_000;
+// How often (ms) the plugin invokes the Python script to check for activity.
+// The script itself decides whether to make an API call or return cached data.
+// Lower = faster detection of Claude Code activity, but more frequent process spawns.
+const POLL_MS = 15_000;
+const MAX_BACKOFF_MS = 5 * 60_000; // 5 minutes max between retries on failure
 const WSL_TIMEOUT_MS = 20_000;
 const NATIVE_TIMEOUT_MS = 10_000;
 
 // WSL2 (Windows): $HOME is expanded by bash inside WSL2
 const WSL_SCRIPT_CMD = 'python3 "$HOME/.local/share/claude-usage/get-usage.py" --json';
+const WSL_SCRIPT_CMD_FORCE = 'python3 "$HOME/.local/share/claude-usage/get-usage.py" --json --force';
 
 // macOS: call python3 with the script path directly
 const NATIVE_SCRIPT_PATH = `${process.env.HOME ?? "~"}/.local/share/claude-usage/get-usage.py`;
@@ -46,40 +51,87 @@ export interface UsageData {
 
 export type UpdateCallback = (data: UsageData) => void;
 
+/** Returns true if sonnet-specific data is present (not null/undefined). */
+export function hasSonnetData(data: UsageData): boolean {
+	return data.seven_day_sonnet != null;
+}
+
 // ── Module-level state ────────────────────────────────────────────────────────
 
 const listeners = new Set<UpdateCallback>();
 let latestData: UsageData | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let consecutiveFailures = 0;
+
+/** Compute the next poll delay: normal 15s on success, exponential backoff on failure. */
+function nextPollDelay(): number {
+	if (consecutiveFailures === 0) return POLL_MS;
+	// 30s, 60s, 120s, 240s… capped at MAX_BACKOFF_MS
+	return Math.min(POLL_MS * 2 ** consecutiveFailures, MAX_BACKOFF_MS);
+}
+
+/** Schedule the next poll using setTimeout (allows dynamic delay). */
+function schedulePoll(): void {
+	if (listeners.size === 0) return;
+	if (pollTimer !== null) return; // already scheduled
+	pollTimer = setTimeout(() => {
+		pollTimer = null;
+		fetchAndNotify();
+	}, nextPollDelay());
+}
 
 function handleResult(err: (Error & { killed?: boolean }) | null, stdout: string, errorLabel: string): void {
 	let data: UsageData;
-	if (err) {
+	// Always try to parse stdout first — the script outputs valid JSON even on
+	// non-zero exit (e.g. auth-error, http-429). Only fall back to the generic
+	// errorLabel when stdout is missing or unparseable.
+	const trimmed = (stdout || "").trim();
+	if (trimmed) {
+		try {
+			data = JSON.parse(trimmed) as UsageData;
+		} catch {
+			if (err) {
+				const msg = err.killed ? "timed out" : (err.message || "unknown").slice(0, 60);
+				data = { error: errorLabel, message: msg };
+			} else {
+				data = { error: "parse-error", message: "bad output from script" };
+			}
+		}
+	} else if (err) {
 		const msg = err.killed ? "timed out" : (err.message || "unknown").slice(0, 60);
 		data = { error: errorLabel, message: msg };
 	} else {
-		try {
-			data = JSON.parse((stdout || "").trim()) as UsageData;
-		} catch {
-			data = { error: "parse-error", message: "bad output from script" };
-		}
+		data = { error: "parse-error", message: "no output from script" };
 	}
+
+	// Track consecutive failures for backoff (wsl-error / python-error = transport
+	// failure; script-level errors like auth-error are successful transport).
+	if (data.error === "wsl-error" || data.error === "python-error" || data.error === "parse-error") {
+		consecutiveFailures++;
+	} else {
+		consecutiveFailures = 0;
+	}
+
 	latestData = data;
 	for (const cb of listeners) cb(data);
+	schedulePoll();
 }
 
-function fetchAndNotify(): void {
+function fetchAndNotify(force = false): void {
 	if (IS_MAC) {
+		const args = [NATIVE_SCRIPT_PATH, "--json"];
+		if (force) args.push("--force");
 		execFile(
 			"python3",
-			[NATIVE_SCRIPT_PATH, "--json"],
+			args,
 			{ timeout: NATIVE_TIMEOUT_MS },
 			(err, stdout) => handleResult(err, stdout, "python-error"),
 		);
 	} else {
+		const cmd = force ? WSL_SCRIPT_CMD_FORCE : WSL_SCRIPT_CMD;
 		execFile(
 			"wsl.exe",
-			["-e", "bash", "-c", WSL_SCRIPT_CMD],
+			["-e", "bash", "-c", cmd],
 			{ timeout: WSL_TIMEOUT_MS },
 			(err, stdout) => handleResult(err, stdout, "wsl-error"),
 		);
@@ -92,7 +144,7 @@ export function addListener(cb: UpdateCallback): void {
 	listeners.add(cb);
 	if (!pollTimer) {
 		fetchAndNotify();
-		pollTimer = setInterval(fetchAndNotify, POLL_MS);
+		// schedulePoll() is called by handleResult after the first fetch completes
 	} else if (latestData !== null) {
 		// Deliver the latest cached state immediately so new buttons don't flash
 		cb(latestData);
@@ -102,11 +154,13 @@ export function addListener(cb: UpdateCallback): void {
 export function removeListener(cb: UpdateCallback): void {
 	listeners.delete(cb);
 	if (listeners.size === 0 && pollTimer !== null) {
-		clearInterval(pollTimer);
+		clearTimeout(pollTimer);
 		pollTimer = null;
 	}
 }
 
 export function fetchNow(): void {
-	fetchAndNotify();
+	// Reset backoff on manual fetch (user pressed the button, so WSL should be up)
+	consecutiveFailures = 0;
+	fetchAndNotify(true);
 }
