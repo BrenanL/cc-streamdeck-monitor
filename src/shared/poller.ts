@@ -12,6 +12,7 @@ import { execFile } from "child_process";
 // The script itself decides whether to make an API call or return cached data.
 // Lower = faster detection of Claude Code activity, but more frequent process spawns.
 const POLL_MS = 15_000;
+const MAX_BACKOFF_MS = 5 * 60_000; // 5 minutes max between retries on failure
 const WSL_TIMEOUT_MS = 20_000;
 const NATIVE_TIMEOUT_MS = 10_000;
 
@@ -59,7 +60,25 @@ export function hasSonnetData(data: UsageData): boolean {
 
 const listeners = new Set<UpdateCallback>();
 let latestData: UsageData | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let consecutiveFailures = 0;
+
+/** Compute the next poll delay: normal 15s on success, exponential backoff on failure. */
+function nextPollDelay(): number {
+	if (consecutiveFailures === 0) return POLL_MS;
+	// 30s, 60s, 120s, 240s… capped at MAX_BACKOFF_MS
+	return Math.min(POLL_MS * 2 ** consecutiveFailures, MAX_BACKOFF_MS);
+}
+
+/** Schedule the next poll using setTimeout (allows dynamic delay). */
+function schedulePoll(): void {
+	if (listeners.size === 0) return;
+	if (pollTimer !== null) return; // already scheduled
+	pollTimer = setTimeout(() => {
+		pollTimer = null;
+		fetchAndNotify();
+	}, nextPollDelay());
+}
 
 function handleResult(err: (Error & { killed?: boolean }) | null, stdout: string, errorLabel: string): void {
 	let data: UsageData;
@@ -84,8 +103,18 @@ function handleResult(err: (Error & { killed?: boolean }) | null, stdout: string
 	} else {
 		data = { error: "parse-error", message: "no output from script" };
 	}
+
+	// Track consecutive failures for backoff (wsl-error / python-error = transport
+	// failure; script-level errors like auth-error are successful transport).
+	if (data.error === "wsl-error" || data.error === "python-error" || data.error === "parse-error") {
+		consecutiveFailures++;
+	} else {
+		consecutiveFailures = 0;
+	}
+
 	latestData = data;
 	for (const cb of listeners) cb(data);
+	schedulePoll();
 }
 
 function fetchAndNotify(force = false): void {
@@ -115,7 +144,7 @@ export function addListener(cb: UpdateCallback): void {
 	listeners.add(cb);
 	if (!pollTimer) {
 		fetchAndNotify();
-		pollTimer = setInterval(fetchAndNotify, POLL_MS);
+		// schedulePoll() is called by handleResult after the first fetch completes
 	} else if (latestData !== null) {
 		// Deliver the latest cached state immediately so new buttons don't flash
 		cb(latestData);
@@ -125,11 +154,13 @@ export function addListener(cb: UpdateCallback): void {
 export function removeListener(cb: UpdateCallback): void {
 	listeners.delete(cb);
 	if (listeners.size === 0 && pollTimer !== null) {
-		clearInterval(pollTimer);
+		clearTimeout(pollTimer);
 		pollTimer = null;
 	}
 }
 
 export function fetchNow(): void {
+	// Reset backoff on manual fetch (user pressed the button, so WSL should be up)
+	consecutiveFailures = 0;
 	fetchAndNotify(true);
 }
