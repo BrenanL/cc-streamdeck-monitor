@@ -58,6 +58,8 @@ IDLE_POLL_SEC = 0             # background refresh when idle (0 = never, use but
 STATE_FILE = "/tmp/claude-usage-state.json"
 DEBUG_LOG = "/tmp/claude-usage-debug.log"  # set to "" to disable logging
 
+LOG_DIR = os.path.expanduser("~/.local/share/claude-usage")
+
 CREDENTIALS_FILE = os.path.expanduser("~/.claude/.credentials.json")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
@@ -130,17 +132,19 @@ def fetch_usage_endpoint(token):
         raise RuntimeError("network-error")
 
 
-def fetch_usage_headers(token):
+def fetch_usage_headers(token, trigger=None):
     """New method: minimal POST to /v1/messages, parse rate-limit headers.
 
     Uses subscription quota (negligible with a 1-token haiku call).
     Returns data in the same shape as the old endpoint for compatibility.
+    If trigger is provided, logs the raw transaction to LOG_DIR.
     """
-    body = json.dumps({
+    body_dict = {
         "model": HEADERS_MODEL,
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "hi"}],
-    }).encode()
+    }
+    body = json.dumps(body_dict).encode()
     req = urllib.request.Request(
         MESSAGES_URL,
         data=body,
@@ -154,7 +158,10 @@ def fetch_usage_headers(token):
     try:
         with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
             hdrs = resp.headers
-            return _parse_ratelimit_headers(hdrs)
+            parsed = _parse_ratelimit_headers(hdrs)
+            if trigger is not None:
+                log_transaction(body_dict, hdrs, parsed, trigger)
+            return parsed
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise RuntimeError("auth-error")
@@ -190,10 +197,10 @@ def _parse_ratelimit_headers(hdrs):
     return data
 
 
-def fetch_usage(token):
+def fetch_usage(token, trigger=None):
     """Dispatch to the configured fetch method."""
     if FETCH_METHOD == "headers":
-        return fetch_usage_headers(token)
+        return fetch_usage_headers(token, trigger=trigger)
     return fetch_usage_endpoint(token)
 
 
@@ -287,6 +294,75 @@ def debug_log(msg):
         pass
 
 
+def log_transaction(req_body, resp_headers, parsed_data, trigger):
+    """Write paired .req.json / .resp.json files and append to history.jsonl.
+
+    All logging is non-fatal — errors are swallowed so they never affect the
+    button display.
+    """
+    try:
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%Y-%m-%d")
+        time_ms = now.strftime("%H%M%S_") + f"{now.microsecond // 1000:03d}"
+
+        raw_dir = os.path.join(LOG_DIR, "raw", date_str)
+        os.makedirs(raw_dir, exist_ok=True)
+
+        base = time_ms  # e.g. "142301_047"
+
+        # ── Request file ──────────────────────────────────────────────────────
+        req_record = {
+            "ts": now.isoformat(),
+            "trigger": trigger,
+            "method": "POST",
+            "url": MESSAGES_URL,
+            "headers": {
+                "Authorization": "[REDACTED]",
+                "anthropic-beta": "oauth-2025-04-20",
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            "body": req_body,
+        }
+        with open(os.path.join(raw_dir, f"{base}.req.json"), "w") as f:
+            json.dump(req_record, f, indent=2)
+
+        # ── Response file ─────────────────────────────────────────────────────
+        # Collect all headers (http.client.HTTPMessage may have duplicates)
+        raw_hdrs = {}
+        for k, v in resp_headers.items():
+            raw_hdrs.setdefault(k, []).append(v)
+
+        resp_record = {
+            "ts": now.isoformat(),
+            "status": 200,
+            "headers": raw_hdrs,
+            "parsed": parsed_data,
+        }
+        with open(os.path.join(raw_dir, f"{base}.resp.json"), "w") as f:
+            json.dump(resp_record, f, indent=2)
+
+        # ── history.jsonl ─────────────────────────────────────────────────────
+        fh = parsed_data.get("five_hour") or {}
+        sd = parsed_data.get("seven_day") or {}
+        ss = parsed_data.get("seven_day_sonnet") or {}
+        entry = {
+            "ts": now.isoformat(),
+            "trigger": trigger,
+            "five_hour": fh.get("utilization"),
+            "seven_day": sd.get("utilization"),
+            "seven_day_sonnet": ss.get("utilization"),
+            "extra_usage": (parsed_data.get("extra_usage") or {}).get("is_enabled", False),
+            "raw": f"raw/{date_str}/{base}",
+        }
+        history_path = os.path.join(LOG_DIR, "history.jsonl")
+        with open(history_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    except Exception as e:
+        debug_log(f"log_transaction failed: {e}")
+
+
 def annotate_resets(data):
     """Add human-readable resets_in to each bucket."""
     for key in ("five_hour", "seven_day", "seven_day_sonnet"):
@@ -354,7 +430,7 @@ def main():
 
         if should_call:
             try:
-                data = fetch_usage(token)
+                data = fetch_usage(token, trigger=reason)
                 state["last_api_call"] = time.time()
                 state["cached_data"] = data
             except RuntimeError as e:
@@ -377,9 +453,10 @@ def main():
 
     else:
         # Force mode or smart polling disabled — always fetch
+        trigger = "force" if force else "smart-off"
         debug_log(f"FORCE API_CALL" if force else "SMART_OFF API_CALL")
         try:
-            data = fetch_usage(token)
+            data = fetch_usage(token, trigger=trigger)
         except RuntimeError as e:
             code = str(e)
             if code == "auth-error":

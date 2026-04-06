@@ -63,5 +63,9 @@ Claude Code. This happened during development (2026-02-24) and is confirmed beha
 | `CLAUDE.md` | This file |
 | `DESIGN.md` | Architecture and design decisions |
 | `get-usage.py` | WSL2 Python script — reads token, fetches usage, prints JSON |
+| `install.sh` | Deployment script — copies plugin + `get-usage.py` to their runtime locations |
 | `com.claude-code.usage-monitor.sdPlugin/` | Stream Deck plugin (Windows Node.js) |
+| `~/.local/share/claude-usage/get-usage.py` | Deployed copy of the script (what the plugin actually calls) |
+| `~/.local/share/claude-usage/history.jsonl` | Persistent log of every API call |
+| `~/.local/share/claude-usage/raw/` | Raw request/response files, one pair per call |
 | `research/` | All research documents |
