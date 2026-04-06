@@ -23,27 +23,26 @@
 
 ## Data Source
 
-- **Endpoint:** `GET https://api.anthropic.com/api/oauth/usage`
+- **Method:** `POST https://api.anthropic.com/v1/messages` with `max_tokens: 1` on `claude-3-haiku-20240307`. The response body is discarded; usage data is read from the `anthropic-ratelimit-unified-*` response headers.
 - **Auth:** `Authorization: Bearer <accessToken>` + `anthropic-beta: oauth-2025-04-20`
 - **Token location:** `~/.claude/.credentials.json` → `.claudeAiOauth.accessToken`
 - **No token refresh.** See CLAUDE.md OAuth rules.
+- **Legacy endpoint** (`GET /api/oauth/usage`) is still in the code but inactive — it stopped working and may come back.
 
-## Response Schema (confirmed 2026-02-24)
+## Parsed Data Shape
+
+`get-usage.py` normalizes both fetch methods into this structure:
 
 ```json
 {
-  "five_hour":        { "utilization": 80.0, "resets_at": "<ISO 8601>" },
-  "seven_day":        { "utilization": 27.0, "resets_at": "<ISO 8601>" },
-  "seven_day_sonnet": { "utilization": 31.0, "resets_at": "<ISO 8601>" },
-  "extra_usage":      { "is_enabled": false, ... },
-  "seven_day_opus":   null,
-  "seven_day_oauth_apps": null,
-  "seven_day_cowork": null,
-  "iguana_necktie":   null
+  "five_hour":        { "utilization": 80.0, "resets_at": "<ISO 8601>", "resets_in": "1h20m" },
+  "seven_day":        { "utilization": 27.0, "resets_at": "<ISO 8601>", "resets_in": "3d18h" },
+  "seven_day_sonnet": { "utilization": 31.0, "resets_at": "<ISO 8601>", "resets_in": "3d18h" },
+  "extra_usage":      { "is_enabled": false }
 }
 ```
 
-`utilization` is 0–100 (not 0–1). Null buckets = not applicable for this plan.
+`utilization` is 0–100. `seven_day_sonnet` may be `null` depending on plan. `resets_in` is added by `annotate_resets()` at output time (not stored in cache).
 
 ## Polling & Error Recovery
 
@@ -75,6 +74,30 @@ Color coding (session %): green < 60%, yellow 60–85%, red ≥ 85%
 - **Runtime:** Node.js 20 (bundled with Stream Deck 6.4+) + `ws` npm package
 - **WSL2 call:** `wsl.exe -e bash -c "python3 <script> --json"`
 - **Install:** copy `.sdPlugin` folder to `%APPDATA%\Elgato\StreamDeck\Plugins\`
+
+## Transaction Logging
+
+Every real API call (not cache hits) is logged to `~/.local/share/claude-usage/`:
+
+```
+~/.local/share/claude-usage/
+├── history.jsonl                     ← one line per call, easy to query
+└── raw/
+    └── YYYY-MM-DD/
+        ├── HHMMSS_mmm.req.json       ← exact request sent (token redacted)
+        └── HHMMSS_mmm.resp.json      ← response headers + parsed data
+```
+
+**`history.jsonl` format (one JSON object per line):**
+```json
+{"ts":"2026-04-06T19:25:02Z","trigger":"idle->active","five_hour":31.0,"seven_day":68.0,"seven_day_sonnet":null,"extra_usage":false,"raw":"raw/2026-04-06/192502_512"}
+```
+
+`trigger` values: `idle->active`, `interval (Xs since last)`, `idle refresh (Xs)`, `no cache`, `force`, `smart-off`.
+
+The `raw` field links back to the paired `.req.json` / `.resp.json` files for full data.
+
+All logging is non-fatal — write failures are swallowed and never affect the button display.
 
 ## What the User Must Do (Stream Deck side)
 
