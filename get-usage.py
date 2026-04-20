@@ -45,7 +45,7 @@ from datetime import datetime, timezone
 # Fetch method: "headers" (messages API + parse headers) or "endpoint"
 # (direct /api/oauth/usage GET). Change this to switch methods.
 FETCH_METHOD = "headers"  # "headers" or "endpoint"
-HEADERS_MODEL = "claude-3-haiku-20240307"  # cheapest model for minimal budget impact
+HEADERS_MODEL = "claude-haiku-4-5-20251001"  # cheapest model for minimal budget impact
 
 # Smart polling: only call the API when Claude Code is actively streaming.
 # Set to False to always call the API on every invocation (original behavior).
